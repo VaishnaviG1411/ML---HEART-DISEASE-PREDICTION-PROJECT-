@@ -1,0 +1,347 @@
+Name: Vaishnavi Gannavaram 
+Instructor: Dr. Srikanth Mudigonda  
+Course: 5330-01: Predictive Modelling and Machine Learning 
+FINAL PROJECT 
+
+STAGLOG DATA SET
+
+
+```{R}
+library(readr)
+statlog_1_ <- read_csv("statlog (1).csv")
+View(statlog_1_)
+#View(statlog_1_)
+dffstaglog <- statlog_1_
+summary(dffstaglog)
+```
+
+```{r}
+#Data cleaning
+#removing na's
+dffstaglog<-na.omit(dffstaglog)
+summary(dffstaglog)
+```
+
+
+```{r}
+library(caret)
+```
+
+
+```{r}
+#RECODING OUTCOME VARIABLE PRESENCE
+library(dplyr)
+library(forcats)
+dffstaglog$presence  <- as.factor(dffstaglog$presence)
+dffstaglogg <- dffstaglog %>%
+                   mutate(presence = fct_recode(presence, 
+                                          "0" = "1",
+                                          "1"= "2")) 
+
+summary(dffstaglogg)
+View(dffstaglogg)
+View(dffstaglog)
+```
+
+
+
+```{r}
+#SCALING AND PRINCIPAL COMPONENT ANALYSIS
+dffn <- as.data.frame(sapply(dffstaglogg[-14], scale))
+prcomps.output <- prcomp(dffn[,-14]) ## eliminate the output variable column works!
+dffn <- as.data.frame(sapply(dffstaglogg[-14], scale))
+summary(prcomps.output) ## look at the cumulative proportions of variance explained
+plot(prcomps.output) ## depicts the PVE across the principal components
+```
+#First 10 principal components account for 90% of varicance in the model.
+
+```{r}
+## logistic regression 
+## firstly, assembling a dataset with the outcome and the first 10 principal components
+ds.obj.for.log.reg <- data.frame(prcomps.output$x[,1:10], dffstaglogg$presence)
+## set up the name of the final column correctly to "Class"
+names(ds.obj.for.log.reg) <- c(names(ds.obj.for.log.reg[1:10]), "presence")
+
+## next, performing the logistic regression
+model.logistic.prcom <- glm(presence ~., data = ds.obj.for.log.reg, 
+                            family = "binomial")
+summary(model.logistic.prcom)
+```
+
+
+```{r}
+## Next, performing logistic regression on the original dataset
+model.logistic.fulldata <- glm(presence ~., data = dffstaglogg, 
+                               family = "binomial")
+summary(model.logistic.fulldata)
+```
+#AIC of the orginal total model is 207.6 and first 10 pc model is 205.52, 
+#Although the pc model performed better, the AIC difference is very slight. Therefore we can use either model in the further steps.
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------RANDOM FOREST MODEL------------------------------
+```{r}
+library(caret)
+set.seed(500) ## chosen arbitrarily; helps with replication across runs
+inTraining <- createDataPartition(dffstaglogg$presence , ## indicate the outcome - helps in balancing the partitions
+                                  p = .75, ## proportion used in training+ testing subset
+                                  list = FALSE)
+training <- dffstaglogg[ inTraining,]
+holdout  <- dffstaglogg[-inTraining,]
+
+## centering and scaling as part of the pre-processing step
+preProcValues <- preProcess(training, method = c("center", "scale"))
+#preProcValues <- preProcess(training, method = "pca")
+preProcValues
+## Next, creating the scaled+centered of the training+testing subset of the dataset
+trainTransformed <- predict(preProcValues,training) 
+trainTransformed
+## applying the same scaling and centering on the holdout set, too
+holdoutTransformed <- predict(preProcValues,holdout)
+holdoutTransformed
+
+
+fitControl <- trainControl(method = "repeatedcv", ## indicate that we want to do k-fold CV
+                           number = 10, ## k = 10
+                           repeats = 10) ## and repeat 10-fold CV 10 times
+
+```
+
+
+```{r}
+rfmodel <- train(presence ~ ., ## model specification: Predicting the outcome  using all other preds
+                 data = trainTransformed, ## using the training+testing subset
+                 method = "rf",
+                 trControl = fitControl, 
+                 verbose = FALSE 
+                 )
+rfmodel
+```
+
+```{r}
+#setting hyperparameters
+set.seed(500)
+traininggrid <- expand.grid(mtry = seq(1,5))
+```
+
+```{r}
+#building random forest model
+rf_random <- train(presence ~ .,
+                 data = trainTransformed, ## the dataset containing the training-testing subset
+                 method = "rf", 
+                 metric = 'Accuracy',
+                 tuneGrid = traininggrid,
+                 trControl = fitControl) 
+rf_random
+```
+
+```{r}
+#computing accuracy on holdoutset
+conf.matrix <- table(holdoutTransformed$presence,
+                     predict(rf_random, newdata = holdoutTransformed))
+pred.accuracy <- sum(diag(conf.matrix))/sum(conf.matrix) * 100
+pred.accuracy
+```
+#rf random model accuracy is 89.55224
+
+```{r}
+#computing accuracy on holdoutset
+conf.matrix <- table(holdoutTransformed$presence,
+                     predict(rfmodel, newdata = holdoutTransformed))
+pred.accuracy <- sum(diag(conf.matrix))/sum(conf.matrix) * 100
+pred.accuracy
+```
+#rfmodel accuracy is 92.53731
+#i.e, rfmodel has more accuracy than rf_random.(after scaling)
+```{r}
+varImp(rfmodel)
+```
+```{r}
+logisticfit <- train(presence ~ .,
+                   data = trainTransformed, 
+                   method = "glm",
+                   #family = "family", ## specifying this seems to cause errors/warnings
+                   trControl = fitControl)
+logisticfit
+```
+
+```{r}
+predvals <- predict(logisticfit, holdoutTransformed)
+
+## creating the confusion matrix and view the results
+confusionMatrix(predvals, holdoutTransformed$presence)#, mode = "everything")
+## Ranking the variables in terms of their importance
+varImp(logisticfit)
+
+```
+
+
+################################################################################
+-----------------------------------------------------------------------------------------------------------LDA
+```{r}
+ldafit <- train(presence ~ .,
+                   data = trainTransformed, 
+                   method = "lda",
+                   #family = "family", ## specifying this seems to cause errors/warnings
+                   trControl = fitControl)
+ldafit
+```
+```{r}
+predvals <- predict(ldafit, holdoutTransformed)
+
+## creating the confusion matrix and view the results
+
+confusionMatrix(predvals, holdoutTransformed$presence)#, mode = "everything")
+
+## Ranking the variables in terms of their importance
+varImp(ldafit)
+```
+#######################################QDA############################################
+```{r}
+Qdafit <- train(presence ~ .,
+                   data = trainTransformed, 
+                   method = "qda",
+                   #family = "family", ## specifying this seems to cause errors/warnings
+                   trControl = fitControl)
+Qdafit
+```
+```{r}
+predvals <- predict(Qdafit, holdoutTransformed)
+
+## creating the confusion matrix and view the results
+confusionMatrix(predvals, holdoutTransformed$presence)#, mode = "everything")
+## Ranking the variables in terms of their importance
+varImp(Qdafit)
+```
+##################################NAIVE BAYES#########################################
+
+```{r}
+#install.packages("klaR")
+library(e1071)
+library(klaR)
+library(shiny)
+#install.packages("shiny")
+
+NBfit <- train(presence ~ .,
+                   data = trainTransformed, 
+                   method = "nb",
+                  
+                   #family = "family", ## specifying this seems to cause errors/warnings
+                   trControl = fitControl)
+NBfit
+```
+
+```{r}
+predvals <- predict(NBfit, holdoutTransformed)
+
+## creating the confusion matrix and view the results
+confusionMatrix(predvals, holdoutTransformed$presence)#, mode = "everything")
+## Ranking the variables in terms of their importance
+varImp(NBfit)
+```
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------NAIVESBAYES------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+```{R}
+library(MASS)
+
+summary(dffstaglogg)
+## centering and scaling as part of the pre-processing step
+preProcValues <- preProcess(dffstaglogg, method = c("center", "scale"))
+#preProcValues <- preProcess(training, method = "pca")
+preProcValues
+## Next, creating the scaled+centered of the training+testing subset of the dataset
+trdffstaglogg<- predict(preProcValues,dffstaglogg) 
+
+
+
+## The overall k-fold-based CV approach
+samplesize <- nrow(trdffstaglogg)
+numfolds <- 10 # we're setting k = 10
+
+quotient <- samplesize %/% numfolds # the %/% operator returns the quotient of a division
+remainder <- samplesize %% numfolds # the %% operator returns the remainder of a division
+
+vct.sizes <- rep(quotient, numfolds) # create a vector representing the initial subsets with size = quotient
+if(remainder > 0){
+    for(i in 1:remainder){
+        vct.sizes[i] <- vct.sizes[i] + 1 # for the "remainder" number of subsets, add one to their size
+    }
+}
+
+print(paste("K:", 10, "n:", samplesize))
+print(vct.sizes)
+
+
+startval <- 1
+endval <- nrow(dffstaglogg)/2
+
+## loading the library e1071
+library(e1071)
+model <- naiveBayes(presence ~ sex+cp+trestbps+thalach+ca+thal,
+                    data = trdffstaglogg[-(startval:endval), ])
+
+summary(model) 
+model ## evaluating the object shows the results
+pred.vals.raw <- predict(model, newdata=trdffstaglogg[startval:endval, ],
+                     type="raw") 
+pred.vals.raw
+
+pred.vals.classes <- predict(model, trdffstaglogg[startval:endval, ],
+                             type="class") 
+pred.vals.classes
+
+data.frame(pred.vals.raw, pred.vals.classes)# view how the probabilities are mapped to classes
+
+table(pred.vals.classes, trdffstaglogg$presence[startval:endval])
+
+set.seed(500)
+ trdffstaglogg<- trdffstaglogg[sample(nrow(trdffstaglogg)), ]
+
+## creating the vector to hold accuracy values
+vct.accuracies <- numeric(numfolds)
+
+startval <- 1
+for(kth in (1:numfolds)){
+    endval <- vct.sizes[kth] + startval - 1
+    model <- naiveBayes(presence ~ sex+cp+trestbps+thalach+ca+thal,
+                        data = trdffstaglogg[-(startval:endval), ])
+
+    pred.vals.classes <- predict(model, newdata=trdffstaglogg[startval:endval, ],
+                                 type="class") 
+
+    tb <- table(pred.vals.classes, trdffstaglogg$presence[startval:endval])
+    vct.accuracies[kth] = sum(diag(tb))/sum(tb)
+    startval <- endval + 1
+}
+
+## Computing the overall RMSE
+overall.accuracy <- mean(vct.accuracies)
+print(paste("For the model presence ~ sex+cp+trestbps+thalach+ca+thal, the overall 10-fold CV accuracy is:",
+            round(overall.accuracy*100, 4), "%"))
+
+```
+82.22%%%% -  NAIVE BAYES 
+
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------REPORTS------------------------------------------------------
+
+```{R}
+library(mlbench)
+library(caret)
+results <- resamples(list(RF=rfmodel, LR=logisticfit, LDA= ldafit, QDA= Qdafit,NB= NBfit))
+# summarizing the distributions
+summary(results)
+# boxplots of results
+bwplot(results)
+# dot plots of results
+dotplot(results)
+
+```
+
