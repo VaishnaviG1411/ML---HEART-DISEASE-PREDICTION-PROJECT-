@@ -1,9 +1,7 @@
-# ML---HEART-DISEASE-PREDICTION-PROJECT-
+# Enhancing Cardiac Disease Detection with Machine Learning
 Conducted ML classification analyses in RStudio, selecting optimal algorithms for heart disease detection and assessed predictor importance.
 
-Enhancing Cardiac Disease Detection with Machine Learning 
-
-Introduction:
+**Introduction:**
 For the health care industry, using machine learning techniques that can help with the 
 early identification and prediction of heart disease would be very beneficial. Therefore, This Project is 
 motivated by the quest to find the most effective Machine Learning algorithm for detecting heart diseases. 
