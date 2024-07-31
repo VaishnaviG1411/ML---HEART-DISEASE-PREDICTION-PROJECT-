@@ -19,3 +19,4 @@ Cite at:
 Dua, D. and Graff, C. (2019). UCI Machine Learning Repository [http://archive.ics.uci.edu/ml]. Irvine, CA: 
 University of California, School of Information and Computer Science. 
 Also, found in Kaggle: Statlog (Heart) Data Set | Kaggle. 
+![Screenshot 2024-07-30 204549](https://github.com/user-attachments/assets/ba943a35-33a3-4f4e-9333-7a19fa306d45)
